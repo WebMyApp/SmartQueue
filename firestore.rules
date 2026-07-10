@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net: Default deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions for validation
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Connection Test Document Match
+    match /test/{id} {
+      allow read, write: if true;
+    }
+
+    // 1. Branches Collection Rules
+    match /branches/{branchId} {
+      allow read: if true;
+      allow create: if isValidId(branchId) 
+                    && incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 200
+                    && incoming().address is string && incoming().address.size() > 0 && incoming().address.size() <= 500
+                    && incoming().createdAt is string
+                    && incoming().currentNumber is number
+                    && incoming().activeCounters is number;
+      
+      allow update: if incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 200
+                    && incoming().address is string && incoming().address.size() > 0 && incoming().address.size() <= 500
+                    && incoming().currentNumber is number
+                    && incoming().activeCounters is number;
+                    
+      allow delete: if true;
+
+      // 2. Queues Subcollection Rules
+      match /queues/{queueId} {
+        allow read: if true;
+        allow create: if isValidId(queueId)
+                      && incoming().branchId == branchId
+                      && incoming().queueNumber is string
+                      && incoming().customerName is string && incoming().customerName.size() > 0 && incoming().customerName.size() <= 200
+                      && incoming().serviceType is string
+                      && incoming().status in ['waiting', 'serving', 'completed', 'skipped']
+                      && incoming().createdAt is string;
+                      
+        allow update: if incoming().branchId == branchId
+                      && incoming().queueNumber is string
+                      && incoming().customerName is string
+                      && incoming().status in ['waiting', 'serving', 'completed', 'skipped'];
+                      
+        allow delete: if true;
+      }
+
+      // 3. Counters Subcollection Rules
+      match /counters/{counterId} {
+        allow read: if true;
+        allow create: if isValidId(counterId)
+                      && incoming().branchId == branchId
+                      && incoming().counterNumber is number
+                      && incoming().status in ['active', 'inactive'];
+                      
+        allow update: if incoming().branchId == branchId
+                      && incoming().counterNumber is number
+                      && incoming().status in ['active', 'inactive'];
+                      
+        allow delete: if true;
+      }
+    }
+
+    // 4. Users Collection Rules
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if isValidId(userId)
+                   && incoming().uid == userId
+                   && incoming().email is string
+                   && incoming().role in ['admin', 'super_admin'];
+    }
+  }
+}

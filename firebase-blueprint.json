@@ -1,0 +1,82 @@
+{
+  "entities": {
+    "branch": {
+      "title": "Branch",
+      "description": "Cabang toko yang memiliki antrean sendiri",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "currentNumber": { "type": "number" },
+        "activeCounters": { "type": "number" }
+      },
+      "required": ["id", "name", "address", "createdAt", "currentNumber", "activeCounters"]
+    },
+    "queue": {
+      "title": "Queue",
+      "description": "Antrean pelanggan di cabang toko tertentu",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branchId": { "type": "string" },
+        "queueNumber": { "type": "string" },
+        "customerName": { "type": "string" },
+        "serviceType": { "type": "string" },
+        "status": { "type": "string", "enum": ["waiting", "serving", "completed", "skipped"] },
+        "counterNumber": { "type": "number" },
+        "phoneNumber": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "calledAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "branchId", "queueNumber", "customerName", "serviceType", "status", "createdAt"]
+    },
+    "counter": {
+      "title": "Counter",
+      "description": "Loket layanan yang melayani pelanggan",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branchId": { "type": "string" },
+        "counterNumber": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "currentTicketId": { "type": "string" },
+        "operatorName": { "type": "string" }
+      },
+      "required": ["id", "branchId", "counterNumber", "status"]
+    },
+    "user": {
+      "title": "User",
+      "description": "Data pengguna berserta perannya dalam sistem antrean",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "super_admin"] },
+        "branchId": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["uid", "email", "role"]
+    }
+  },
+  "firestore": {
+    "branches/{branchId}": {
+      "schema": "branch",
+      "description": "Daftar cabang toko"
+    },
+    "branches/{branchId}/queues/{queueId}": {
+      "schema": "queue",
+      "description": "Daftar antrean dalam suatu cabang"
+    },
+    "branches/{branchId}/counters/{counterId}": {
+      "schema": "counter",
+      "description": "Daftar loket layanan dalam suatu cabang"
+    },
+    "users/{userId}": {
+      "schema": "user",
+      "description": "Daftar pengguna admin/super admin"
+    }
+  }
+}

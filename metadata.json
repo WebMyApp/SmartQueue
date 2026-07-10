@@ -1,0 +1,6 @@
+{
+  "name": "Smart Queue Manager",
+  "description": "Sistem antrean pintar real-time dengan dashboard admin toko dan super admin analitik multi-cabang.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
