@@ -12,6 +12,7 @@ import {
   writeBatch
 } from "firebase/firestore";
 import { Branch, QueueTicket, Counter, UserSession } from "../types";
+import { speakQueueCall } from "../lib/voice";
 import { 
   Users, 
   Clock, 
@@ -156,6 +157,9 @@ export default function AdminDashboard({ session, branches }: AdminDashboardProp
         });
       }
       
+      // Trigger local voice call
+      speakQueueCall(nextTicket.queueNumber, activeCounter);
+      
       setAdvice(""); // Reset advice when state changes to prompt fresh analyzer
     } catch (err) {
       console.error("Error calling next queue:", err);
@@ -169,6 +173,8 @@ export default function AdminDashboard({ session, branches }: AdminDashboardProp
       await updateDoc(ticketRef, {
         calledAt: new Date().toISOString() // Updates to trigger real-time voice re-broadcast
       });
+      // Trigger local voice call
+      speakQueueCall(ticket.queueNumber, ticket.counterNumber || activeCounter);
     } catch (err) {
       console.error("Error recalling ticket:", err);
     }

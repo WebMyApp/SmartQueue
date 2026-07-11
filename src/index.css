@@ -5,3 +5,45 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
+
+@media print {
+  /* Set light print-friendly backgrounds */
+  html, body, #root {
+    background-color: white !important;
+    background-image: none !important;
+    color: black !important;
+  }
+  
+  /* Hide all screen elements */
+  body * {
+    visibility: hidden !important;
+  }
+  
+  /* Reveal only our special receipt element and its children */
+  #print-ticket-receipt, #print-ticket-receipt * {
+    visibility: visible !important;
+  }
+  
+  /* Position and style the receipt at the top left of the printed paper */
+  #print-ticket-receipt {
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 80mm !important;
+    margin: 0 auto !important;
+    padding: 10px !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: white !important;
+    color: black !important;
+  }
+}
+
+@media screen {
+  #print-ticket-receipt {
+    display: none !important;
+  }
+}
+

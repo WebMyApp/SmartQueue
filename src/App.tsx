@@ -221,6 +221,8 @@ export default function App() {
     ? branches.find(b => b.id === session.branchId)?.name 
     : undefined;
 
+  const isAlreadyInActiveMenu = currentRole === "customer" || currentRole === "admin" || currentRole === "super_admin";
+
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col font-sans selection:bg-lime-400 selection:text-black" id="app-root">
       {/* Navigation Header */}
@@ -232,6 +234,7 @@ export default function App() {
         session={session}
         onLogout={handleLogout}
         branchName={selectedBranchName}
+        hideBackButton={isAlreadyInActiveMenu}
       />
 
       {/* Main Container */}

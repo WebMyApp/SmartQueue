@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { UserSession, Branch } from "../types";
-import { ShieldCheck, Building, Key, Mail, Sparkles } from "lucide-react";
+import { ShieldCheck, Building, Key, Mail, Sparkles, Loader2 } from "lucide-react";
+import { db } from "../lib/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
 
 interface LoginFormProps {
   branches: Branch[];
@@ -11,10 +13,12 @@ export default function LoginForm({ branches, onLoginSuccess }: LoginFormProps) 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
     const trimmedEmail = email.trim().toLowerCase();
 
@@ -26,6 +30,8 @@ export default function LoginForm({ branches, onLoginSuccess }: LoginFormProps) 
         role: "super_admin",
         name: "Yudi Prahara (Super Admin)"
       });
+      setLoading(false);
+      return;
     } else if (trimmedEmail === "admin.pusat@antrepintar.com" && password === "admin123") {
       const targetBranch = branches[0];
       onLoginSuccess({
@@ -35,29 +41,43 @@ export default function LoginForm({ branches, onLoginSuccess }: LoginFormProps) 
         branchId: targetBranch ? targetBranch.id : "",
         name: "Hendra Wijaya (Admin Cabang)"
       });
-    } else {
-      setError("Email atau Password salah! Gunakan jalan pintas demo di bawah untuk masuk instan.");
+      setLoading(false);
+      return;
     }
-  };
 
-  const handleQuickLogin = (type: "super" | "admin") => {
-    setError("");
-    if (type === "super") {
-      onLoginSuccess({
-        uid: "demo_super_admin",
-        email: "super@antrepintar.com",
-        role: "super_admin",
-        name: "Yudi Prahara (Super Admin)"
-      });
-    } else {
-      const targetBranch = branches[0];
-      onLoginSuccess({
-        uid: "demo_branch_admin_1",
-        email: "admin.pusat@antrepintar.com",
-        role: "admin",
-        branchId: targetBranch ? targetBranch.id : "",
-        name: "Hendra Wijaya (Admin Cabang)"
-      });
+    try {
+      const usersRef = collection(db, "users");
+      const q = query(usersRef, where("email", "==", trimmedEmail));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        let matchedUser: any = null;
+        querySnapshot.forEach((doc) => {
+          const u = doc.data();
+          if (u.password === password) {
+            matchedUser = {
+              uid: doc.id,
+              email: u.email,
+              role: u.role || "admin",
+              branchId: u.branchId || "",
+              name: u.name || "Staf Toko"
+            };
+          }
+        });
+
+        if (matchedUser) {
+          onLoginSuccess(matchedUser);
+          setLoading(false);
+          return;
+        }
+      }
+
+      setError("Email atau Password salah! Periksa kembali akun Anda.");
+    } catch (err: any) {
+      console.error("Login error:", err);
+      setError("Gagal menghubungkan ke server otentikasi. Silakan coba lagi.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -113,41 +133,19 @@ export default function LoginForm({ branches, onLoginSuccess }: LoginFormProps) 
         <button
           id="btn-login-submit"
           type="submit"
-          className="w-full py-3.5 bg-lime-400 hover:bg-lime-500 text-black font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg border border-lime-300 cursor-pointer"
+          disabled={loading}
+          className="w-full py-3.5 bg-lime-400 hover:bg-lime-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-black font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg border border-lime-300 disabled:border-transparent cursor-pointer flex items-center justify-center gap-2"
         >
-          Masuk Sekarang
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Memproses...</span>
+            </>
+          ) : (
+            <span>Masuk Sekarang</span>
+          )}
         </button>
       </form>
-
-      {/* Quick Access panel (Highly requested for rapid prototyping & evaluator review!) */}
-      <div className="pt-6 border-t border-zinc-800 space-y-3">
-        <div className="flex items-center space-x-1.5 text-white font-black text-xs uppercase tracking-wider">
-          <Sparkles className="w-4 h-4 text-lime-400 animate-pulse" />
-          <span>Pintu Masuk Demo Instan:</span>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            id="quick-login-admin"
-            type="button"
-            onClick={() => handleQuickLogin("admin")}
-            className="flex flex-col items-center p-3 border border-zinc-800 bg-zinc-950 hover:bg-zinc-850 hover:border-lime-450/40 rounded-2xl transition-all text-left flex-1 cursor-pointer"
-          >
-            <Building className="w-5 h-5 text-lime-400 mb-1.5" />
-            <span className="text-xs font-black text-white uppercase tracking-tight text-center">Admin Cabang</span>
-            <span className="text-[9px] text-zinc-500 mt-0.5 font-medium">Jakarta Pusat</span>
-          </button>
-          <button
-            id="quick-login-super"
-            type="button"
-            onClick={() => handleQuickLogin("super")}
-            className="flex flex-col items-center p-3 border border-zinc-800 bg-zinc-950 hover:bg-zinc-850 hover:border-lime-450/40 rounded-2xl transition-all flex-1 cursor-pointer"
-          >
-            <ShieldCheck className="w-5 h-5 text-lime-400 mb-1.5" />
-            <span className="text-xs font-black text-white uppercase tracking-tight text-center">Super Admin</span>
-            <span className="text-[9px] text-zinc-500 mt-0.5 font-medium">Multi-Cabang</span>
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

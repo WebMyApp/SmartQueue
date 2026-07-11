@@ -8,6 +8,7 @@ interface HeaderProps {
   session: UserSession | null;
   onLogout: () => void;
   branchName?: string;
+  hideBackButton?: boolean;
 }
 
 export default function Header({
@@ -15,7 +16,8 @@ export default function Header({
   setRole,
   session,
   onLogout,
-  branchName
+  branchName,
+  hideBackButton
 }: HeaderProps) {
   return (
     <header className="border-b border-zinc-800 bg-zinc-950 sticky top-0 z-50 shadow-lg" id="header-container">
@@ -36,7 +38,7 @@ export default function Header({
         </div>
 
         {/* Middle Route Navigation: Back to Portal button */}
-        {currentRole !== "portal" && (
+        {currentRole !== "portal" && !hideBackButton && (
           <div className="flex items-center">
             <button
               id="back-to-portal-btn"

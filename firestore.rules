@@ -80,10 +80,11 @@ service cloud.firestore {
     // 4. Users Collection Rules
     match /users/{userId} {
       allow read: if true;
-      allow write: if isValidId(userId)
+      allow create, update: if isValidId(userId)
                    && incoming().uid == userId
                    && incoming().email is string
                    && incoming().role in ['admin', 'super_admin'];
+      allow delete: if true;
     }
   }
 }

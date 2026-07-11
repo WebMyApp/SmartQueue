@@ -50,8 +50,45 @@ export default function CustomerPanel({ branches, lockedBranchId }: CustomerPane
   });
   const [myTicket, setMyTicket] = useState<QueueTicket | null>(null);
 
+  // Auto-print flag
+  const [shouldAutoPrint, setShouldAutoPrint] = useState(false);
+
+  // Countdown to reset kiosk screen back to taking tickets
+  const [ticketCountdown, setTicketCountdown] = useState<number | null>(null);
+
   // Sound settings
   const [enableSound, setEnableSound] = useState(true);
+
+  // Handle automatic print when myTicket is populated after ticket creation
+  useEffect(() => {
+    if (shouldAutoPrint && myTicket && myTicket.id === myTicketId) {
+      setShouldAutoPrint(false);
+      setTimeout(() => {
+        window.print();
+      }, 600);
+    }
+  }, [shouldAutoPrint, myTicket, myTicketId]);
+
+  // Countdown timer to auto-reset the kiosk/panel back to ticket taking form
+  useEffect(() => {
+    if (ticketCountdown === null) return;
+    if (ticketCountdown <= 0) {
+      setMyTicketId("");
+      setMyTicket(null);
+      setTicketCountdown(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setTicketCountdown(prev => (prev !== null ? prev - 1 : null));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [ticketCountdown]);
+
+  const resetKiosk = () => {
+    setMyTicketId("");
+    setMyTicket(null);
+    setTicketCountdown(null);
+  };
 
   // Auto-select first branch if available
   useEffect(() => {
@@ -163,14 +200,13 @@ export default function CustomerPanel({ branches, lockedBranchId }: CustomerPane
   // Handle generating a new ticket
   const handleTakeTicket = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedBranchId || !customerName.trim()) return;
+    if (!selectedBranchId) return;
 
     try {
       // Calculate prefix based on service type
       let prefix = "A";
       if (serviceType === "Customer Service") prefix = "B";
-      else if (serviceType === "Klaim & Pengembalian") prefix = "C";
-      else if (serviceType === "Konsultasi Teknis") prefix = "D";
+      else if (serviceType === "Layanan Pengaduan & Retur") prefix = "C";
 
       // Filter same service prefix queues from today to get sequential number
       const todayPrefixTickets = queues.filter(q => q.queueNumber.startsWith(prefix));
@@ -180,15 +216,17 @@ export default function CustomerPanel({ branches, lockedBranchId }: CustomerPane
       const newTicketData = {
         branchId: selectedBranchId,
         queueNumber: formattedNumber,
-        customerName: customerName.trim(),
+        customerName: "Pelanggan",
         serviceType: serviceType,
         status: "waiting",
         createdAt: new Date().toISOString(),
-        phoneNumber: phoneNumber.trim() || undefined,
+        phoneNumber: "",
       };
 
       const docRef = await addDoc(collection(db, `branches/${selectedBranchId}/queues`), newTicketData);
       setMyTicketId(docRef.id);
+      setShouldAutoPrint(true);
+      setTicketCountdown(10); // Start 10 seconds auto-reset for Kiosk
       
       // Reset input fields
       setCustomerName("");
@@ -202,6 +240,7 @@ export default function CustomerPanel({ branches, lockedBranchId }: CustomerPane
     if (confirm("Apakah Anda yakin ingin membatalkan antrean Anda?")) {
       setMyTicketId("");
       setMyTicket(null);
+      setTicketCountdown(null);
     }
   };
 
@@ -516,21 +555,43 @@ export default function CustomerPanel({ branches, lockedBranchId }: CustomerPane
                   )}
 
                   {/* Print / Cancel Button */}
-                  <div className="mt-8 flex justify-center space-x-3">
+                  <div className="mt-6 flex justify-center space-x-3">
                     <button
                       id="btn-print-ticket"
                       onClick={() => window.print()}
-                      className="px-4 py-2.5 bg-lime-400 hover:bg-lime-500 text-black rounded-xl text-xs font-black uppercase tracking-wider transition-colors flex items-center space-x-2 border border-lime-300"
+                      className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center space-x-1.5 border border-zinc-700"
                     >
                       <Printer className="w-3.5 h-3.5" />
-                      <span>Cetak Tiket</span>
+                      <span>Cetak Ulang</span>
                     </button>
                     <button
                       id="btn-cancel-ticket"
                       onClick={handleCancelTicket}
-                      className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-350 rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-zinc-700"
+                      className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-red-400 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border border-zinc-800"
                     >
                       Batalkan Tiket
+                    </button>
+                  </div>
+
+                  {ticketCountdown !== null && (
+                    <div className="mt-5 bg-zinc-950 p-3 rounded-xl border border-zinc-850 text-center">
+                      <p className="text-[10px] font-black uppercase text-lime-400 font-mono tracking-widest animate-pulse">
+                        Layar kembali otomatis dalam {ticketCountdown} detik
+                      </p>
+                      <p className="text-[9px] text-zinc-500 font-medium mt-1">
+                        untuk melayani antrean pelanggan berikutnya
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Kiosk Done Button to take new ticket immediately */}
+                  <div className="mt-6 pt-4 border-t border-dashed border-zinc-800">
+                    <button
+                      id="btn-done-new-ticket"
+                      onClick={resetKiosk}
+                      className="w-full py-3.5 bg-lime-400 hover:bg-lime-500 text-black font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md flex items-center justify-center space-x-2 border border-lime-300 cursor-pointer"
+                    >
+                      <span>Selesai & Ambil Antrean Baru</span>
                     </button>
                   </div>
                 </div>
@@ -540,89 +601,80 @@ export default function CustomerPanel({ branches, lockedBranchId }: CustomerPane
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-zinc-900 rounded-3xl p-6 border border-zinc-800 shadow-xl"
+                className="bg-zinc-900 rounded-3xl p-6 border border-zinc-800 shadow-xl space-y-6"
                 id="take-ticket-form-container"
               >
-                <div className="flex items-center space-x-3 mb-6">
+                <div className="flex items-center space-x-3 text-left">
                   <div className="p-2.5 bg-zinc-850 rounded-xl text-lime-400 border border-zinc-800">
                     <Printer className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="text-base font-black uppercase tracking-tight text-white">Ambil Antrean Baru</h3>
-                    <p className="text-[11px] text-zinc-500 font-mono uppercase tracking-wider mt-0.5">Mulai antrean pintar Anda</p>
+                    <p className="text-[11px] text-zinc-500 font-mono uppercase tracking-wider mt-0.5">Pilih kategori layanan yang dituju</p>
                   </div>
                 </div>
 
-                <form onSubmit={handleTakeTicket} className="space-y-4">
-                  <div>
-                    <label className="block text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">Nama Pelanggan</label>
-                    <input
-                      id="input-customer-name"
-                      type="text"
-                      required
-                      placeholder="Masukkan nama lengkap Anda"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-600 focus:border-lime-400 focus:bg-zinc-950 text-sm focus:outline-none focus:ring-1 focus:ring-lime-400 font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">No. Telepon / WhatsApp (Opsional)</label>
-                    <input
-                      id="input-phone-number"
-                      type="tel"
-                      placeholder="Contoh: 08123456789"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-600 focus:border-lime-400 focus:bg-zinc-950 text-sm focus:outline-none focus:ring-1 focus:ring-lime-400 font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">Layanan yang Dituju</label>
-                    <div className="grid grid-cols-1 gap-2">
+                <form onSubmit={handleTakeTicket} className="space-y-4 text-left">
+                  <div className="space-y-2">
+                    <label className="block text-[9px] font-black text-zinc-500 uppercase tracking-widest">Kategori Layanan yang Dituju</label>
+                    <div className="grid grid-cols-1 gap-2.5">
                       {[
                         { name: "Kasir / Teller", code: "A", desc: "Setoran, penarikan, pembayaran ritel" },
                         { name: "Customer Service", code: "B", desc: "Informasi umum, registrasi, kartu" },
-                        { name: "Klaim & Pengembalian", code: "C", desc: "Retur barang cacat, garansi toko" },
-                        { name: "Konsultasi Teknis", code: "D", desc: "Bantuan instalasi, perbaikan gawai" }
-                      ].map((svc) => (
-                        <button
-                          key={svc.name}
-                          id={`service-btn-${svc.name.replace(/\s+/g, "-")}`}
-                          type="button"
-                          onClick={() => setServiceType(svc.name)}
-                          className={`flex items-start justify-between p-3.5 rounded-xl border text-left transition-all ${
-                            serviceType === svc.name
-                              ? "bg-zinc-850 border-lime-400 ring-1 ring-lime-400 text-white"
-                              : "bg-zinc-950 border-zinc-800 hover:bg-zinc-850 text-zinc-300"
-                          }`}
-                        >
-                          <div>
-                            <p className="text-sm font-black uppercase tracking-tight flex items-center gap-1.5">
-                              <span className={`w-2 h-2 rounded-full ${serviceType === svc.name ? "bg-lime-400" : "bg-zinc-700"}`}></span>
-                              {svc.name}
-                            </p>
-                            <p className="text-xs text-zinc-500 mt-1 leading-normal font-medium">{svc.desc}</p>
-                          </div>
-                          <span className={`px-2 py-1 rounded font-mono text-xs font-black border ${
-                            serviceType === svc.name ? "bg-lime-400 text-black border-lime-300" : "bg-zinc-800 text-zinc-400 border-zinc-700"
-                          }`}>
-                            {svc.code}
-                          </span>
-                        </button>
-                      ))}
+                        { name: "Layanan Pengaduan & Retur", code: "C", desc: "Bantuan keluhan, retur, garansi toko" }
+                      ].map((svc) => {
+                        const isSelected = serviceType === svc.name;
+                        
+                        // Find current active / last serving ticket in this category
+                        const activeTicketOfCat = queues.find(q => q.serviceType === svc.name && q.status === "serving");
+                        const waitingCountOfCat = queues.filter(q => q.serviceType === svc.name && q.status === "waiting").length;
+
+                        return (
+                          <button
+                            key={svc.name}
+                            id={`service-btn-${svc.name.replace(/\s+/g, "-")}`}
+                            type="button"
+                            onClick={() => setServiceType(svc.name)}
+                            className={`w-full flex items-center justify-between p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                              isSelected
+                                ? "bg-zinc-850 border-lime-400 ring-1 ring-lime-400 text-white"
+                                : "bg-zinc-950 border-zinc-805 hover:bg-zinc-850 text-zinc-350"
+                            }`}
+                          >
+                            <div className="space-y-1">
+                              <p className="text-xs font-black uppercase tracking-tight flex items-center gap-1.5">
+                                <span className={`w-2 h-2 rounded-full ${isSelected ? "bg-lime-400" : "bg-zinc-700"}`}></span>
+                                {svc.name}
+                              </p>
+                              <p className="text-[10px] text-zinc-500 leading-normal font-medium">{svc.desc}</p>
+                            </div>
+                            
+                            <div className="flex items-center space-x-3">
+                              <div className="text-right font-mono text-[10px]">
+                                <p className="text-zinc-500 font-bold uppercase tracking-wider">Antrean:</p>
+                                <p className={isSelected ? "text-lime-400 font-black" : "text-zinc-400 font-bold"}>
+                                  {activeTicketOfCat ? activeTicketOfCat.queueNumber : "—"}
+                                </p>
+                              </div>
+                              <span className={`px-2.5 py-1 rounded-lg font-mono text-xs font-black border flex flex-col items-center justify-center min-w-[36px] ${
+                                isSelected ? "bg-lime-400 text-black border-lime-300" : "bg-zinc-800 text-zinc-400 border-zinc-705"
+                              }`}>
+                                {svc.code}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
                   <button
                     id="btn-submit-ticket"
                     type="submit"
-                    className="w-full mt-4 py-3.5 bg-lime-400 hover:bg-lime-500 text-black font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg flex items-center justify-center space-x-2 border border-lime-300"
+                    className="w-full py-4 bg-lime-400 hover:bg-lime-500 text-black font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg flex items-center justify-center space-x-2 border border-lime-300 cursor-pointer"
                   >
                     <Printer className="w-4 h-4 stroke-[2.5]" />
-                    <span>Dapatkan Antrean</span>
+                    <span>Cetak Tiket Antrean</span>
                   </button>
                 </form>
               </motion.div>
@@ -638,7 +690,7 @@ export default function CustomerPanel({ branches, lockedBranchId }: CustomerPane
             <ul className="text-xs space-y-2.5 leading-relaxed">
               <li className="flex items-start gap-1">
                 <span className="text-lime-400 font-bold font-mono">•</span>
-                <span>Pilih jenis layanan yang sesuai agar diarahkan ke loket servis yang tepat.</span>
+                <span>Tekan tombol "Cetak Tiket Antrean" di atas untuk mendapatkan nomor antrean baru secara otomatis.</span>
               </li>
               <li className="flex items-start gap-1">
                 <span className="text-lime-400 font-bold font-mono">•</span>
@@ -653,6 +705,42 @@ export default function CustomerPanel({ branches, lockedBranchId }: CustomerPane
 
         </div>
       </div>
+
+      {/* Hidden print ticket element */}
+      {myTicket && (
+        <div id="print-ticket-receipt" className="text-black bg-white p-6 font-sans text-center">
+          <h2 className="text-lg font-extrabold uppercase tracking-widest border-b-2 border-black pb-2 mb-4">ANTREPINTAR</h2>
+          <p className="text-xs font-bold uppercase tracking-wider mb-1">STRUK TIKET ANTREAN</p>
+          <p className="text-sm font-black uppercase text-black mb-1">{selectedBranch?.name || "CABANG UTAMA"}</p>
+          <p className="text-[10px] text-zinc-600 mb-4">{selectedBranch?.address || ""}</p>
+          
+          <div className="border-4 border-black py-6 my-4 rounded-xl">
+            <p className="text-xs font-extrabold tracking-widest uppercase text-zinc-700 mb-1">NOMOR ANTREAN</p>
+            <p className="text-6xl font-black font-mono tracking-tight text-black">{myTicket.queueNumber}</p>
+          </div>
+          
+          <div className="space-y-2 text-xs text-left border-t border-b border-dashed border-zinc-400 py-4 my-4">
+            <div className="flex justify-between">
+              <span className="font-semibold text-zinc-600">Layanan:</span>
+              <span className="font-extrabold uppercase text-black">{myTicket.serviceType}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="font-semibold text-zinc-600">Estimasi Tunggu:</span>
+              <span className="font-extrabold text-black">± {estimatedWaitMin} Menit</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="font-semibold text-zinc-600">Sisa Antrean:</span>
+              <span className="font-extrabold text-black">{totalWaiting} Orang</span>
+            </div>
+          </div>
+          
+          <div className="text-[10px] font-mono text-zinc-700 mt-4">
+            <p>Dicetak: {myTicket.createdAt ? new Date(myTicket.createdAt).toLocaleString("id-ID") : new Date().toLocaleString("id-ID")}</p>
+            <p className="mt-4 font-black uppercase tracking-widest">HARAP SIMPAN STRUK INI</p>
+            <p className="text-[9px] text-zinc-500 mt-1">Terima kasih atas kepercayaan Anda</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -8,7 +8,8 @@ import {
   orderBy,
   doc,
   deleteDoc,
-  updateDoc
+  updateDoc,
+  setDoc
 } from "firebase/firestore";
 import { Branch, QueueTicket, Counter } from "../types";
 import {
@@ -26,7 +27,11 @@ import {
   AlertCircle,
   BarChart3,
   PieChart as PieIcon,
-  LineChart as LineIcon
+  LineChart as LineIcon,
+  UserPlus,
+  Lock,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -65,8 +70,51 @@ export default function SuperAdminDashboard({ branches }: SuperAdminDashboardPro
   const [superAdvice, setSuperAdvice] = useState("");
   const [loadingSuperAdvice, setLoadingSuperAdvice] = useState(false);
 
-  // Tab: "branches" | "analytics"
-  const [superTab, setSuperTab] = useState<"branches" | "analytics">("branches");
+  // Tab: "branches" | "analytics" | "users"
+  const [superTab, setSuperTab] = useState<"branches" | "analytics" | "users">("branches");
+
+  // Users Management State
+  const [usersList, setUsersList] = useState<any[]>([]);
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserBranchId, setNewUserBranchId] = useState("");
+  const [showPasswordMap, setShowPasswordMap] = useState<{ [uid: string]: boolean }>({});
+  const [userActionError, setUserActionError] = useState("");
+  const [userActionSuccess, setUserActionSuccess] = useState("");
+
+  // Real-time listener for users
+  useEffect(() => {
+    const usersRef = collection(db, "users");
+    const unsubscribeUsers = onSnapshot(usersRef, (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        list.push({
+          id: docSnap.id,
+          uid: data.uid || docSnap.id,
+          email: data.email || "",
+          password: data.password || "",
+          role: data.role || "admin",
+          branchId: data.branchId || "",
+          name: data.name || "Staf Toko",
+          createdAt: data.createdAt || ""
+        });
+      });
+      setUsersList(list);
+    }, (error) => {
+      console.error("Error listening to users collection:", error);
+    });
+
+    return () => unsubscribeUsers();
+  }, []);
+
+  // Pre-fill user branch selection when branches list updates
+  useEffect(() => {
+    if (branches.length > 0 && !newUserBranchId) {
+      setNewUserBranchId(branches[0].id);
+    }
+  }, [branches, newUserBranchId]);
 
   // Create real-time snapshot listeners for all branches' queues and counters
   useEffect(() => {
@@ -163,6 +211,71 @@ export default function SuperAdminDashboard({ branches }: SuperAdminDashboardPro
         await deleteDoc(doc(db, "branches", branchId));
       } catch (err) {
         console.error("Error deleting branch:", err);
+      }
+    }
+  };
+
+  // Handle adding a new kiosk user
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUserActionError("");
+    setUserActionSuccess("");
+
+    const email = newUserEmail.trim().toLowerCase();
+    const password = newUserPassword.trim();
+    const name = newUserName.trim();
+    const branchId = newUserBranchId;
+
+    if (!email || !password || !name || !branchId) {
+      setUserActionError("Semua kolom harus diisi!");
+      return;
+    }
+
+    if (!email.includes("@")) {
+      setUserActionError("Format email tidak valid!");
+      return;
+    }
+
+    try {
+      const existingUser = usersList.find(u => u.email === email);
+      if (existingUser) {
+        setUserActionError("Email user sudah terdaftar di sistem!");
+        return;
+      }
+
+      const generatedId = "user_" + Math.random().toString(36).substring(2, 15);
+
+      await setDoc(doc(db, "users", generatedId), {
+        uid: generatedId,
+        email,
+        password,
+        name,
+        branchId,
+        role: "admin",
+        createdAt: new Date().toISOString()
+      });
+
+      setUserActionSuccess(`User "${name}" berhasil dibuat untuk kiosk!`);
+      setNewUserEmail("");
+      setNewUserPassword("");
+      setNewUserName("");
+    } catch (err: any) {
+      console.error("Error creating kiosk user:", err);
+      setUserActionError(`Gagal membuat user: ${err.message}`);
+    }
+  };
+
+  // Handle deleting a kiosk user
+  const handleDeleteUser = async (userId: string, email: string) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus user "${email}"? Akun ini tidak akan bisa masuk kiosk lagi.`)) {
+      setUserActionError("");
+      setUserActionSuccess("");
+      try {
+        await deleteDoc(doc(db, "users", userId));
+        setUserActionSuccess("User berhasil dihapus.");
+      } catch (err: any) {
+        console.error("Error deleting user:", err);
+        setUserActionError(`Gagal menghapus user: ${err.message}`);
       }
     }
   };
@@ -273,7 +386,7 @@ export default function SuperAdminDashboard({ branches }: SuperAdminDashboardPro
     <div className="space-y-8" id="super-admin-root">
       
       {/* Tab select option */}
-      <div className="flex border border-zinc-800 bg-zinc-900 p-2 rounded-2xl shadow-xl max-w-md">
+      <div className="flex border border-zinc-800 bg-zinc-900 p-2 rounded-2xl shadow-xl max-w-xl w-full">
         <button
           id="btn-super-tab-branches"
           onClick={() => setSuperTab("branches")}
@@ -283,7 +396,18 @@ export default function SuperAdminDashboard({ branches }: SuperAdminDashboardPro
               : "text-zinc-500 hover:text-white"
           }`}
         >
-          Kelola Cabang & Real-Time
+          Kelola Cabang
+        </button>
+        <button
+          id="btn-super-tab-users"
+          onClick={() => setSuperTab("users")}
+          className={`flex-1 py-2.5 text-center text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
+            superTab === "users"
+              ? "bg-lime-400 text-black border border-lime-300"
+              : "text-zinc-500 hover:text-white"
+          }`}
+        >
+          User Kiosk
         </button>
         <button
           id="btn-super-tab-analytics"
@@ -294,7 +418,7 @@ export default function SuperAdminDashboard({ branches }: SuperAdminDashboardPro
               : "text-zinc-500 hover:text-white"
           }`}
         >
-          Laporan Analitik Bulanan
+          Laporan Analitik
         </button>
       </div>
 
@@ -532,6 +656,233 @@ export default function SuperAdminDashboard({ branches }: SuperAdminDashboardPro
                   )}
                 </AnimatePresence>
               </div>
+            </div>
+
+          </div>
+
+        </div>
+      ) : superTab === "users" ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8" id="super-admin-users-tab">
+          
+          {/* Left Column: List of Kiosk Users (7 cols) */}
+          <div className="lg:col-span-7 space-y-8">
+            
+            <div className="bg-zinc-900 rounded-3xl border border-zinc-800 shadow-xl p-6 space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                  <Users className="w-5 h-5 text-lime-400" />
+                  Daftar Akun Kiosk Aktif
+                </h3>
+                <span className="px-2.5 py-1 bg-zinc-950 border border-zinc-850 rounded-xl text-zinc-500 font-mono font-bold text-xs">
+                  {usersList.length} Akun
+                </span>
+              </div>
+
+              {userActionSuccess && (
+                <div className="p-4 bg-lime-400/10 border border-lime-400/20 rounded-xl text-xs text-lime-400 font-black uppercase tracking-wider">
+                  {userActionSuccess}
+                </div>
+              )}
+
+              {userActionError && (
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400 font-black uppercase tracking-wider">
+                  {userActionError}
+                </div>
+              )}
+
+              {usersList.length === 0 ? (
+                <div className="text-center py-16 bg-zinc-950/40 rounded-2xl border border-zinc-805/60 space-y-3">
+                  <p className="text-zinc-500 text-xs font-mono uppercase tracking-wider">
+                    Belum ada akun operator kiosk yang dibuat.
+                  </p>
+                  <p className="text-[10px] text-zinc-600 font-medium">
+                    Gunakan formulir di samping untuk menambahkan akses instan untuk staf cabang.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {usersList.map((user) => {
+                    const mappedBranch = branches.find((b) => b.id === user.branchId);
+                    const isShowingPassword = !!showPasswordMap[user.uid];
+
+                    return (
+                      <div
+                        key={user.id}
+                        className="p-5 bg-zinc-950 border border-zinc-805 rounded-2xl transition-all hover:border-zinc-750 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                      >
+                        <div className="space-y-2.5 flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-sm font-black uppercase tracking-tight text-white truncate max-w-[200px]">
+                              {user.name}
+                            </h4>
+                            <span className="px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded-lg text-[9px] font-mono font-black text-lime-400 uppercase tracking-widest">
+                              {user.role}
+                            </span>
+                          </div>
+
+                          <div className="space-y-1 text-xs text-zinc-400 font-medium">
+                            <p className="flex items-center gap-2 font-mono text-[11px] text-zinc-300">
+                              <span className="text-zinc-600 font-bold uppercase tracking-wider text-[9px]">EMAIL:</span>
+                              {user.email}
+                            </p>
+                            <div className="flex items-center gap-2 font-mono text-[11px] text-zinc-300">
+                              <span className="text-zinc-600 font-bold uppercase tracking-wider text-[9px]">PASS:</span>
+                              <span className="text-zinc-200">
+                                {isShowingPassword ? user.password : "••••••••"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowPasswordMap((prev) => ({
+                                    ...prev,
+                                    [user.uid]: !isShowingPassword,
+                                  }))
+                                }
+                                className="text-zinc-500 hover:text-white transition-colors cursor-pointer ml-1"
+                              >
+                                {isShowingPassword ? (
+                                  <EyeOff className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Eye className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                            <p className="flex items-center gap-1.5 text-zinc-500">
+                              <Building className="w-3.5 h-3.5 text-zinc-600" />
+                              <span className="text-zinc-350 font-bold">
+                                {mappedBranch ? mappedBranch.name : "Cabang Tidak Diketahui"}
+                              </span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          id={`delete-user-btn-${user.id}`}
+                          onClick={() => handleDeleteUser(user.id, user.email)}
+                          className="p-2.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all flex-shrink-0 cursor-pointer"
+                          title="Hapus Kredensial User"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+          </div>
+
+          {/* Right Column: Add Kiosk User Form (5 cols) */}
+          <div className="lg:col-span-5 space-y-8">
+            
+            <div className="bg-zinc-900 rounded-3xl p-6 border border-zinc-800 shadow-xl space-y-5">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-zinc-950 border border-zinc-850 rounded-xl text-lime-400">
+                  <UserPlus className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black uppercase tracking-tight text-white">Buat Akses Kiosk</h3>
+                  <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider mt-0.5">
+                    Registrasi User Baru untuk Login Kiosk
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleAddUser} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">
+                    Nama Operator / Nama Kiosk
+                  </label>
+                  <input
+                    id="new-user-name-input"
+                    type="text"
+                    required
+                    placeholder="Contoh: Kiosk Loket 1"
+                    value={newUserName}
+                    onChange={(e) => setNewUserName(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 focus:border-lime-400 focus:ring-1 focus:ring-lime-400 text-sm font-bold text-white placeholder-zinc-750 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">
+                    Email Login Kiosk
+                  </label>
+                  <input
+                    id="new-user-email-input"
+                    type="email"
+                    required
+                    placeholder="Contoh: kiosk1.pusat@antrepintar.com"
+                    value={newUserEmail}
+                    onChange={(e) => setNewUserEmail(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 focus:border-lime-400 focus:ring-1 focus:ring-lime-400 text-sm font-bold text-white placeholder-zinc-750 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-3.5 w-4 h-4 text-zinc-600" />
+                    <input
+                      id="new-user-password-input"
+                      type="text"
+                      required
+                      placeholder="Masukkan Password Kiosk"
+                      value={newUserPassword}
+                      onChange={(e) => setNewUserPassword(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 focus:border-lime-400 focus:ring-1 focus:ring-lime-400 text-sm font-bold text-white placeholder-zinc-750 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">
+                    Cabang Penugasan Kiosk
+                  </label>
+                  <select
+                    id="new-user-branch-select"
+                    required
+                    value={newUserBranchId}
+                    onChange={(e) => setNewUserBranchId(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 focus:border-lime-400 focus:ring-1 focus:ring-lime-400 text-sm font-bold text-white focus:outline-none cursor-pointer"
+                  >
+                    {branches.length === 0 ? (
+                      <option value="">Tidak ada cabang terdaftar</option>
+                    ) : (
+                      branches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                <button
+                  id="btn-super-submit-user"
+                  type="submit"
+                  className="w-full py-3.5 bg-lime-400 hover:bg-lime-500 text-black font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg border border-lime-300 flex items-center justify-center space-x-1 cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4 stroke-[2.5]" />
+                  <span>Buat User Kiosk</span>
+                </button>
+              </form>
+            </div>
+
+            <div className="bg-zinc-900 rounded-3xl p-5 border border-zinc-805 text-xs text-zinc-400 space-y-3 leading-relaxed">
+              <div className="flex items-center space-x-1.5 text-white font-black text-[10px] uppercase tracking-wider font-mono">
+                <AlertCircle className="w-4 h-4 text-lime-400" />
+                <span>Petunjuk Penting</span>
+              </div>
+              <p>
+                Kredensial yang dibuat di sini dapat langsung digunakan oleh petugas operator kiosk untuk login pada halaman utama login panel menggunakan email dan password tersebut.
+              </p>
+              <p>
+                Setelah login, operator tersebut akan diarahkan secara otomatis ke dashboard cabang penugasan masing-masing yang telah Anda tentukan.
+              </p>
             </div>
 
           </div>
